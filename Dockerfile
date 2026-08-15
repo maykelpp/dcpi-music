@@ -9,7 +9,7 @@ WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt \
-    && pip install --no-cache-dir yt-dlp
+    && pip install --no-cache-dir -U yt-dlp
 
 COPY backend ./backend
 COPY frontend ./frontend

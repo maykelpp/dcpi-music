@@ -10,6 +10,11 @@ import json
 import subprocess
 from typing import Optional
 
+# YouTube suele bloquear/pedir verificación al cliente "web" cuando la
+# petición viene de una IP de datacenter (como Render). Forzar el cliente
+# "android" evita ese chequeo en la mayoría de los casos.
+_ANTIBLOCK_ARGS = ["--extractor-args", "youtube:player_client=android,web"]
+
 
 def _to_track_summary(entry: dict) -> dict:
     duration = entry.get("duration") or 0
@@ -29,11 +34,12 @@ async def search(query: str, limit: int = 20) -> list[dict]:
     proc = await asyncio.create_subprocess_exec(
         "yt-dlp",
         f"ytsearch{limit * 2}:{query}",
-        "-J", "--flat-playlist", "--no-warnings",
+        "-J", "--flat-playlist", "--no-warnings", *_ANTIBLOCK_ARGS,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     out, err = await proc.communicate()
     if proc.returncode != 0:
+        print("[audio_source.search] yt-dlp stderr:", err.decode(errors="ignore"))
         raise RuntimeError(err.decode(errors="ignore") or "yt-dlp falló al buscar")
 
     data = json.loads(out)
@@ -50,11 +56,12 @@ async def search(query: str, limit: int = 20) -> list[dict]:
 
 async def get_track_info(video_id: str) -> Optional[dict]:
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-J", "--no-warnings", f"https://www.youtube.com/watch?v={video_id}",
+        "yt-dlp", "-J", "--no-warnings", *_ANTIBLOCK_ARGS, f"https://www.youtube.com/watch?v={video_id}",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     out, err = await proc.communicate()
     if proc.returncode != 0:
+        print("[audio_source.get_track_info] yt-dlp stderr:", err.decode(errors="ignore"))
         return None
     entry = json.loads(out)
     return _to_track_summary(entry)
@@ -62,11 +69,12 @@ async def get_track_info(video_id: str) -> Optional[dict]:
 
 async def get_available_qualities(video_id: str) -> list[int]:
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-J", "--no-warnings", f"https://www.youtube.com/watch?v={video_id}",
+        "yt-dlp", "-J", "--no-warnings", *_ANTIBLOCK_ARGS, f"https://www.youtube.com/watch?v={video_id}",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     out, err = await proc.communicate()
     if proc.returncode != 0:
+        print("[audio_source.get_available_qualities] yt-dlp stderr:", err.decode(errors="ignore"))
         raise RuntimeError(err.decode(errors="ignore") or "yt-dlp falló al listar formatos")
 
     info = json.loads(out)
@@ -84,6 +92,7 @@ def stream_audio_process(video_id: str, fmt: str = "mp3", quality: int = 192) ->
         "yt-dlp",
         "-f", "bestaudio",
         "--no-warnings",
+        *_ANTIBLOCK_ARGS,
         "-x",
         "--audio-format", fmt,
         "--audio-quality", f"{quality}K",
