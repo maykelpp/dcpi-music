@@ -5,7 +5,11 @@ const DcpiApi = (() => {
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (options.auth) {
-      headers['X-Telegram-Init-Data'] = DcpiTelegram.getInitData();
+      if (DcpiTelegram.isTelegram) {
+        headers['X-Telegram-Init-Data'] = DcpiTelegram.getInitData();
+      } else {
+        headers['X-Guest-Id'] = DcpiTelegram.getGuestId();
+      }
     }
     if (options.body) headers['Content-Type'] = 'application/json';
 

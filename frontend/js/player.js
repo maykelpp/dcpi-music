@@ -57,7 +57,7 @@ const DcpiPlayer = (() => {
     DcpiApi.getLyrics(track.id).then(DcpiLyrics.load).catch(() => DcpiLyrics.reset());
 
     updateFavoriteUI();
-    if (DcpiTelegram.isTelegram) {
+    {
       DcpiApi.addHistory({ track_id: track.id, title: track.title, artist: track.artist, cover_url: track.cover }).catch(() => {});
     }
   }
@@ -148,7 +148,6 @@ const DcpiPlayer = (() => {
   let favoriteIds = new Set();
 
   async function loadFavoriteIds() {
-    if (!DcpiTelegram.isTelegram) return;
     try {
       const { favorites } = await DcpiApi.getFavorites();
       favoriteIds = new Set(favorites.map((f) => f.track_id));
@@ -161,7 +160,7 @@ const DcpiPlayer = (() => {
   }
 
   els.favBtn.addEventListener('click', async () => {
-    if (!currentTrack || !DcpiTelegram.isTelegram) return;
+    if (!currentTrack) return;
     const isFav = favoriteIds.has(currentTrack.id);
     try {
       if (isFav) {

@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
 
 from db.init import db
-from middleware.telegram_auth import telegram_auth
+from middleware.identity import get_user_id
 
 router = APIRouter()
 
 
 @router.get("")
-async def get_history(user: dict = Depends(telegram_auth)):
-    telegram_id = str(user["id"])
+async def get_history(user_id: str = Depends(get_user_id)):
+    telegram_id = user_id
     rows = db().execute(
         "SELECT track_id, title, artist, cover_url, played_at FROM history "
         "WHERE telegram_id = ? ORDER BY played_at DESC LIMIT 100",
@@ -18,8 +18,8 @@ async def get_history(user: dict = Depends(telegram_auth)):
 
 
 @router.post("", status_code=201)
-async def add_history(payload: dict, user: dict = Depends(telegram_auth)):
-    telegram_id = str(user["id"])
+async def add_history(payload: dict, user_id: str = Depends(get_user_id)):
+    telegram_id = user_id
     track_id = payload.get("track_id")
     title = payload.get("title")
     artist = payload.get("artist")
@@ -37,8 +37,8 @@ async def add_history(payload: dict, user: dict = Depends(telegram_auth)):
 
 
 @router.delete("")
-async def clear_history(user: dict = Depends(telegram_auth)):
-    telegram_id = str(user["id"])
+async def clear_history(user_id: str = Depends(get_user_id)):
+    telegram_id = user_id
     db().execute("DELETE FROM history WHERE telegram_id = ?", (telegram_id,))
     db().commit()
     return {"ok": True}

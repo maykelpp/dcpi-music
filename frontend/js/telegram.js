@@ -1,8 +1,8 @@
-// Integración con Telegram Web Apps — https://core.telegram.org/bots/webapps
+// Funciona tanto dentro de Telegram (Web App) como en un navegador normal.
 const TG = window.Telegram?.WebApp;
 
 const DcpiTelegram = (() => {
-  if (TG) {
+  if (TG && TG.initData) {
     TG.ready();
     TG.expand();
     TG.setHeaderColor?.('#0B0B10');
@@ -10,9 +10,20 @@ const DcpiTelegram = (() => {
     TG.enableClosingConfirmation?.();
   }
 
+  const isTelegram = !!(TG && TG.initData);
+
+  // Si no estamos dentro de Telegram, generamos/persistimos un ID de
+  // invitado en el navegador para que historial/favoritos igual funcionen.
+  function getGuestId() {
+    let id = localStorage.getItem('dcpi_guest_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('dcpi_guest_id', id);
+    }
+    return id;
+  }
+
   function getInitData() {
-    // initData crudo — el backend lo valida con HMAC. Nunca se confía en
-    // el user object del cliente para nada sensible.
     return TG?.initData || '';
   }
 
@@ -34,5 +45,5 @@ const DcpiTelegram = (() => {
     show ? TG.BackButton.show() : TG.BackButton.hide();
   }
 
-  return { getInitData, getUser, hapticImpact, onBackButton, showBackButton, isTelegram: !!TG };
+  return { getInitData, getGuestId, getUser, hapticImpact, onBackButton, showBackButton, isTelegram };
 })();

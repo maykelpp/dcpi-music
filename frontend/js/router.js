@@ -26,10 +26,6 @@ const DcpiRouter = (() => {
 
   async function loadHistory() {
     const list = document.getElementById('history-list');
-    if (!DcpiTelegram.isTelegram) {
-      list.innerHTML = '<p class="hint">Abre DCPI Music desde Telegram para ver tu historial.</p>';
-      return;
-    }
     list.innerHTML = '<p class="hint">Cargando…</p>';
     try {
       const { history } = await DcpiApi.getHistory();
@@ -53,10 +49,6 @@ const DcpiRouter = (() => {
 
   async function loadFavorites() {
     const list = document.getElementById('favorites-list');
-    if (!DcpiTelegram.isTelegram) {
-      list.innerHTML = '<p class="hint">Abre DCPI Music desde Telegram para ver tus favoritos.</p>';
-      return;
-    }
     list.innerHTML = '<p class="hint">Cargando…</p>';
     try {
       const { favorites } = await DcpiApi.getFavorites();
