@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from middleware.rate_limit import api_rate_limit
-from routers import download, favorites, history, lyrics, search, stream, track, telegram_webhook
+from routers import download, favorites, feed, history, lyrics, search, stream, track, telegram_webhook
 
 app = FastAPI(title="DCPI Music Backend")
 
@@ -76,6 +76,7 @@ app.include_router(track.router, prefix="/api/track", dependencies=[Depends(api_
 app.include_router(lyrics.router, prefix="/api/lyrics", dependencies=[Depends(api_rate_limit)])
 app.include_router(stream.router, prefix="/api/stream")
 app.include_router(download.router, prefix="/api/download", dependencies=[Depends(api_rate_limit)])
+app.include_router(feed.router, prefix="/api/feed", dependencies=[Depends(api_rate_limit)])
 
 # Historial/favoritos: funcionan con Telegram O con un ID de invitado del navegador
 app.include_router(history.router, prefix="/api/history", dependencies=[Depends(api_rate_limit)])

@@ -57,6 +57,7 @@ const DcpiPlayer = (() => {
     DcpiApi.getLyrics(track.id).then(DcpiLyrics.load).catch(() => DcpiLyrics.reset());
 
     updateFavoriteUI();
+    DcpiSearch?.setFeedSeed?.(track.id);
     {
       DcpiApi.addHistory({ track_id: track.id, title: track.title, artist: track.artist, cover_url: track.cover }).catch(() => {});
     }

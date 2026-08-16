@@ -101,6 +101,61 @@ async def get_available_qualities(video_id: str) -> list[int]:
     return available or [128]
 
 
+# ===== Feed / recomendaciones =====
+# Sin canción de referencia (arranque en frío): se rota entre estos géneros
+# para tener variedad, cada "página" del scroll pide uno distinto.
+GENRE_SEEDS = [
+    "reggaeton hits", "pop en español", "trap latino", "rock clásico",
+    "lo-fi chill beats", "salsa clásica", "bachata romántica",
+    "electronica mix", "hip hop hits", "balada pop",
+]
+
+
+async def get_home_feed(offset: int, limit: int = 10) -> list[dict]:
+    """Feed inicial (sin canción de referencia): rota géneros, cada página trae uno distinto."""
+    genre = GENRE_SEEDS[(offset // limit) % len(GENRE_SEEDS)]
+    return await search(genre, limit=limit)
+
+
+async def get_radio_mix(seed_video_id: str, offset: int, limit: int = 10) -> list[dict]:
+    """
+    Recomendaciones reales de YouTube basadas en una canción: usa la
+    "mix/radio" (playlist RD<id>) que el propio YouTube genera — no es una
+    API inventada, es la función de "Mix" que ya existe en YouTube.
+    """
+    url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}"
+    try:
+        data, _client = await _run_json_flat(url)
+    except RuntimeError:
+        # Si no se puede armar el mix (video restringido, etc.), cae al feed genérico
+        return await get_home_feed(offset, limit)
+
+    entries = data.get("entries") or []
+    sliced = entries[offset: offset + limit]
+    results = []
+    for e in sliced:
+        duration = e.get("duration") or 0
+        if 0 < duration < 15 * 60:
+            results.append(_to_track_summary(e))
+    return results
+
+
+async def _run_json_flat(url: str) -> tuple[dict, str]:
+    """Como _run_json pero con --flat-playlist (para playlists/mixes, más rápido)."""
+    last_err = ""
+    for client in _CLIENT_FALLBACKS:
+        proc = await asyncio.create_subprocess_exec(
+            "yt-dlp", "-J", "--flat-playlist", *_base_args(client), url,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        out, err = await proc.communicate()
+        if proc.returncode == 0:
+            return json.loads(out), client
+        last_err = err.decode(errors="ignore")
+        print(f"[audio_source] (flat) cliente '{client}' falló: {last_err[:200]}")
+    raise RuntimeError(last_err or "yt-dlp falló con todos los clientes disponibles")
+
+
 def stream_audio_process(video_id: str, fmt: str = "mp3", quality: int = 192, client: str = "android") -> subprocess.Popen:
     """Devuelve el proceso yt-dlp con stdout en modo pipe (streaming, sin guardar en disco)."""
     args = [

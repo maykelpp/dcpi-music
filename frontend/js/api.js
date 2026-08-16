@@ -27,6 +27,11 @@ const DcpiApi = (() => {
   }
 
   const search = (q) => request(`/search?q=${encodeURIComponent(q)}`);
+  const getFeed = (seed, offset, limit = 10) => {
+    const params = new URLSearchParams({ offset, limit });
+    if (seed) params.set('seed', seed);
+    return request(`/feed?${params.toString()}`);
+  };
   const getTrack = (id) => request(`/track/${id}`);
   const getLyrics = (id) => request(`/lyrics/${id}`);
   const getQualities = (id) => request(`/download/${id}/qualities`);
@@ -42,7 +47,7 @@ const DcpiApi = (() => {
   const removeFavorite = (trackId) => request(`/favorites/${trackId}`, { method: 'DELETE', auth: true });
 
   return {
-    search, getTrack, getLyrics, getQualities, streamUrl, downloadUrl,
+    search, getFeed, getTrack, getLyrics, getQualities, streamUrl, downloadUrl,
     getHistory, addHistory, clearHistory,
     getFavorites, addFavorite, removeFavorite,
   };
