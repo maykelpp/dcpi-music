@@ -88,7 +88,7 @@
       </div>
 
       <button id="btn-download" class="download-btn">
-        <svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px;margin-right:6px;"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Descargar
+        <svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px;margin-right:6px;"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="download-btn-label">Descargar</span>
       </button>
     </section>
 
@@ -118,6 +118,19 @@
         <button id="confirm-download" class="download-btn">Descargar</button>
         <button id="cancel-download" class="text-btn">Cancelar</button>
       </div>
+    </div>
+
+    <!-- ======= MINI-REPRODUCTOR FLOTANTE ======= -->
+    <div id="mini-player" class="mini-player hidden">
+      <img id="mini-cover" class="mini-cover" alt="" />
+      <div class="mini-meta">
+        <div id="mini-title" class="mini-title">—</div>
+        <div id="mini-artist" class="mini-artist">—</div>
+      </div>
+      <button id="mini-play" class="mini-play-btn" aria-label="Reproducir/Pausar">
+        <svg id="mini-icon-play" viewBox="0 0 24 24" width="20" height="20"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        <svg id="mini-icon-pause" viewBox="0 0 24 24" width="20" height="20" hidden><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
     </div>
 
     <!-- ======= NAVEGACIÓN INFERIOR ======= -->

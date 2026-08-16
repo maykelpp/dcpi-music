@@ -12,6 +12,7 @@ const DcpiRouter = (() => {
       btn.classList.toggle('active', btn.dataset.screen === screenName);
     });
     document.getElementById('bottom-nav').style.display = screenName === 'player' ? 'none' : 'flex';
+    document.getElementById('mini-player').style.display = screenName === 'player' ? 'none' : '';
     DcpiTelegram.showBackButton(screenName === 'player');
 
     if (screenName === 'history') loadHistory();

@@ -20,8 +20,8 @@ const DcpiApi = (() => {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
-      throw new Error(err.error || `Error ${res.status}`);
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Error ${res.status}`);
     }
     return res.status === 204 ? null : res.json();
   }
@@ -36,7 +36,7 @@ const DcpiApi = (() => {
   const getLyrics = (id) => request(`/lyrics/${id}`);
   const getQualities = (id) => request(`/download/${id}/qualities`);
   const streamUrl = (id) => `${API_BASE}/stream/${id}`;
-  const downloadUrl = (id, format, quality) => `${API_BASE}/download/${id}?format=${format}&quality=${quality}`;
+  const downloadUrl = (id, quality) => `${API_BASE}/download/${id}?quality=${quality}`;
 
   const getHistory = () => request('/history', { auth: true });
   const addHistory = (track) => request('/history', { method: 'POST', auth: true, body: track });

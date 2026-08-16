@@ -20,7 +20,21 @@ const DcpiPlayer = (() => {
     volume: document.getElementById('volume-bar'),
     favBtn: document.getElementById('btn-favorite'),
     downloadBtn: document.getElementById('btn-download'),
+    miniPlayer: document.getElementById('mini-player'),
+    miniCover: document.getElementById('mini-cover'),
+    miniTitle: document.getElementById('mini-title'),
+    miniArtist: document.getElementById('mini-artist'),
+    miniPlayBtn: document.getElementById('mini-play'),
+    miniIconPlay: document.getElementById('mini-icon-play'),
+    miniIconPause: document.getElementById('mini-icon-pause'),
   };
+
+  // Preferencias guardadas localmente en el navegador (no en el servidor)
+  const savedVolume = parseFloat(localStorage.getItem('dcpi_volume'));
+  if (!isNaN(savedVolume)) {
+    audio.volume = savedVolume;
+    els.volume.value = savedVolume;
+  }
 
   let queue = [];
   let queueIndex = -1;
@@ -49,6 +63,11 @@ const DcpiPlayer = (() => {
     els.bg.style.backgroundImage = track.cover ? `url(${track.cover})` : 'none';
     els.timeTotal.textContent = fmtTime(track.duration || 0);
 
+    els.miniTitle.textContent = track.title;
+    els.miniArtist.textContent = track.artist;
+    els.miniCover.src = track.cover || '';
+    els.miniPlayer.classList.remove('hidden');
+
     audio.src = DcpiApi.streamUrl(track.id);
     audio.play().catch(() => {});
     setPlayingUI(true);
@@ -66,6 +85,8 @@ const DcpiPlayer = (() => {
   function setPlayingUI(playing) {
     els.iconPlay.hidden = playing;
     els.iconPause.hidden = !playing;
+    els.miniIconPlay.hidden = playing;
+    els.miniIconPause.hidden = !playing;
   }
 
   function togglePlay() {
@@ -127,7 +148,18 @@ const DcpiPlayer = (() => {
     isSeeking = false;
   });
 
-  els.volume.addEventListener('input', () => { audio.volume = Number(els.volume.value); });
+  els.volume.addEventListener('input', () => {
+    audio.volume = Number(els.volume.value);
+    localStorage.setItem('dcpi_volume', els.volume.value);
+  });
+
+  els.miniPlayBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePlay();
+  });
+  els.miniPlayer.addEventListener('click', () => {
+    if (currentTrack) DcpiRouter.go('player');
+  });
 
   els.playBtn.addEventListener('click', togglePlay);
   els.nextBtn.addEventListener('click', playNext);
@@ -181,31 +213,35 @@ const DcpiPlayer = (() => {
 
   // ===== Descargas =====
   const modal = document.getElementById('download-modal');
-  const formatOptions = document.getElementById('format-options');
   const qualityOptions = document.getElementById('quality-options');
-  let selectedFormat = 'mp3';
-  let selectedQuality = 192;
+  const downloadLabel = document.getElementById('download-btn-label');
+  let selectedQuality = 320;
 
   els.downloadBtn.addEventListener('click', async () => {
     if (!currentTrack) return;
-    els.downloadBtn.textContent = 'Comprobando calidades…';
+    downloadLabel.textContent = 'Comprobando…';
     try {
-      const { qualities, formats } = await DcpiApi.getQualities(currentTrack.id);
-      selectedFormat = formats[0];
+      const { qualities } = await DcpiApi.getQualities(currentTrack.id);
+      if (!qualities.length) {
+        alert('El autor de esta canción no habilitó descargas.');
+        return;
+      }
       selectedQuality = qualities[qualities.length - 1];
 
-      formatOptions.innerHTML = formats.map((f) =>
-        `<button class="chip ${f === selectedFormat ? 'selected' : ''}" data-format="${f}">${f.toUpperCase()}</button>`
-      ).join('');
+      document.getElementById('format-options').innerHTML = '';
       qualityOptions.innerHTML = qualities.map((q) =>
         `<button class="chip ${q === selectedQuality ? 'selected' : ''}" data-quality="${q}">${q} kbps</button>`
       ).join('');
 
       modal.classList.remove('hidden');
     } catch (e) {
-      alert('No se pudieron comprobar las calidades disponibles.');
+      if (e.message && e.message.includes('no tiene descarga habilitada')) {
+        alert('El autor de esta canción no habilitó descargas.');
+      } else {
+        alert(e.message || 'No se pudo comprobar la disponibilidad de descarga. Intenta de nuevo.');
+      }
     } finally {
-      els.downloadBtn.textContent = '⬇️ Descargar';
+      downloadLabel.textContent = 'Descargar';
     }
   });
 
@@ -225,7 +261,7 @@ const DcpiPlayer = (() => {
   document.getElementById('cancel-download').addEventListener('click', () => modal.classList.add('hidden'));
   document.getElementById('confirm-download').addEventListener('click', () => {
     if (!currentTrack) return;
-    window.location.href = DcpiApi.downloadUrl(currentTrack.id, selectedFormat, selectedQuality);
+    window.location.href = DcpiApi.downloadUrl(currentTrack.id, selectedQuality);
     modal.classList.add('hidden');
   });
 
