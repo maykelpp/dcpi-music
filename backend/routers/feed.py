@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from services import audio_source
 
 router = APIRouter()
-TRACK_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{6,20}$")
+TRACK_ID_RE = re.compile(r"^[0-9]{1,20}$")
 
 
 @router.get("")

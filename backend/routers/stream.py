@@ -1,24 +1,12 @@
 import re
 
 from fastapi import APIRouter, HTTPException, Path
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
 
 from services import audio_source
 
 router = APIRouter()
-TRACK_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{6,20}$")
-
-
-def _iter_process_stdout(proc):
-    try:
-        while True:
-            chunk = proc.stdout.read(64 * 1024)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        if proc.poll() is None:
-            proc.kill()
+TRACK_ID_RE = re.compile(r"^[0-9]{1,20}$")
 
 
 @router.get("/{track_id}")
@@ -26,9 +14,10 @@ async def stream(track_id: str = Path(...)):
     if not TRACK_ID_RE.match(track_id):
         raise HTTPException(status_code=400, detail="ID de canción inválido")
 
-    client = await audio_source.get_working_client(track_id)
-    if not client:
-        raise HTTPException(status_code=502, detail="No se pudo acceder al audio de esta canción")
+    url = await audio_source.get_stream_url(track_id)
+    if not url:
+        raise HTTPException(status_code=404, detail="Canción no encontrada")
 
-    proc = audio_source.stream_audio_process(track_id, "mp3", 192, client=client)
-    return StreamingResponse(_iter_process_stdout(proc), media_type="audio/mpeg")
+    # Jamendo sirve el audio directo desde su propio CDN — redirigimos en
+    # vez de hacer proxy, así no cargamos ancho de banda de nuestro server.
+    return RedirectResponse(url=url)

@@ -1,57 +1,49 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
+import httpx
 
 from middleware.rate_limit import download_rate_limit
-from routers.stream import _iter_process_stdout
+from fastapi import Depends
 from services import audio_source
 
 router = APIRouter()
-TRACK_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{6,20}$")
-ALLOWED_FORMATS = {"mp3", "m4a"}
-ALLOWED_QUALITIES = {128, 192, 256, 320}
+TRACK_ID_RE = re.compile(r"^[0-9]{1,20}$")
+ALLOWED_QUALITIES = {96, 320}
 
 
 @router.get("/{track_id}/qualities")
 async def get_qualities(track_id: str = Path(...)):
     if not TRACK_ID_RE.match(track_id):
         raise HTTPException(status_code=400, detail="ID de canción inválido")
-    try:
-        qualities = await audio_source.get_available_qualities(track_id)
-        return {"qualities": qualities, "formats": sorted(ALLOWED_FORMATS)}
-    except Exception as e:
-        print("[download:qualities]", e)
-        raise HTTPException(status_code=502, detail="No se pudieron comprobar las calidades disponibles")
+    qualities = await audio_source.get_available_qualities(track_id)
+    if not qualities:
+        raise HTTPException(status_code=404, detail="Esta canción no tiene descarga habilitada por su autor")
+    return {"qualities": qualities, "formats": ["mp3"]}
 
 
 @router.get("/{track_id}", dependencies=[Depends(download_rate_limit)])
-async def download(
-    track_id: str = Path(...),
-    format: str = Query("mp3"),
-    quality: int = Query(192),
-):
+async def download(track_id: str = Path(...), quality: int = Query(320)):
     if not TRACK_ID_RE.match(track_id):
         raise HTTPException(status_code=400, detail="ID de canción inválido")
-    if format not in ALLOWED_FORMATS:
-        raise HTTPException(status_code=400, detail=f"Formato no soportado. Usa: {', '.join(ALLOWED_FORMATS)}")
     if quality not in ALLOWED_QUALITIES:
         raise HTTPException(status_code=400, detail=f"Calidad no soportada. Usa: {sorted(ALLOWED_QUALITIES)}")
 
-    track = await audio_source.get_track_info(track_id)
-    if not track:
-        raise HTTPException(status_code=404, detail="Canción no encontrada")
+    info = await audio_source.get_download_url(track_id, quality)
+    if not info:
+        raise HTTPException(status_code=404, detail="Descarga no disponible para esta canción")
 
-    client = await audio_source.get_working_client(track_id)
-    if not client:
-        raise HTTPException(status_code=502, detail="No se pudo acceder al audio de esta canción")
+    safe_title = re.sub(r"[^\w\s-]", "", info["title"])[:80]
 
-    safe_title = re.sub(r"[^\w\s-]", "", track["title"])[:80]
-    proc = audio_source.stream_audio_process(track_id, format, quality, client=client)
-    media_type = "audio/mp4" if format == "m4a" else "audio/mpeg"
+    async def _proxy():
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream("GET", info["url"]) as res:
+                async for chunk in res.aiter_bytes(64 * 1024):
+                    yield chunk
 
     return StreamingResponse(
-        _iter_process_stdout(proc),
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.{format}"'},
+        _proxy(),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.mp3"'},
     )

@@ -1,174 +1,131 @@
 """
-Adapter de fuente de audio.
+Adapter de fuente de audio — Jamendo (https://api.jamendo.com/v3.0/).
 
-Búsqueda/metadata y extracción real de audio, todo vía el binario `yt-dlp`
-(no requiere API key). Aislado aquí para poder sustituir la fuente después
-sin tocar routers.
+Plataforma real de música con licencias libres/Creative Commons: los
+artistas suben su música específicamente para que se pueda transmitir y
+descargar vía API. A diferencia de YouTube, no bloquea peticiones
+automatizadas ni requiere cookies — es una API pública pensada para esto.
+
+Catálogo: independiente/indie, no artistas mainstream. Es la contrapartida
+de no depender de scraping/yt-dlp.
+
+Requiere JAMENDO_CLIENT_ID (gratis en https://devportal.jamendo.com/).
 """
-import asyncio
-import json
 import os
-import subprocess
 from typing import Optional
 
-# YouTube bloquea/pide verificación ("Sign in to confirm you're not a bot")
-# con más frecuencia a peticiones desde IPs de datacenter. Distintos
-# "clientes" (formas de identificarse) reciben distinto trato — se prueban
-# en cascada hasta que uno funcione, en vez de depender de uno solo.
-_CLIENT_FALLBACKS = ["android", "ios", "tv_embedded", "web_embedded", "web"]
+import httpx
 
-# Si se configura un archivo de cookies (exportado de una cuenta de YouTube
-# logueada), se usa como último recurso — es lo único 100% confiable contra
-# este bloqueo, pero requiere que el usuario lo genere y suba manualmente.
-_COOKIES_FILE = os.getenv("YT_COOKIES_FILE")  # ej: ./cookies.txt
+JAMENDO_BASE = "https://api.jamendo.com/v3.0"
 
-
-def _base_args(client: str) -> list[str]:
-    args = ["--extractor-args", f"youtube:player_client={client}", "--no-warnings"]
-    if _COOKIES_FILE and os.path.exists(_COOKIES_FILE):
-        args += ["--cookies", _COOKIES_FILE]
-    return args
-
-
-async def _run_json(url: str) -> tuple[dict, str]:
-    """Corre `yt-dlp -J` probando cada cliente hasta que uno no falle por bloqueo.
-    Devuelve (datos, cliente_que_funcionó)."""
-    last_err = ""
-    for client in _CLIENT_FALLBACKS:
-        proc = await asyncio.create_subprocess_exec(
-            "yt-dlp", "-J", *_base_args(client), url,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        out, err = await proc.communicate()
-        if proc.returncode == 0:
-            return json.loads(out), client
-        last_err = err.decode(errors="ignore")
-        print(f"[audio_source] cliente '{client}' falló: {last_err[:200]}")
-    raise RuntimeError(last_err or "yt-dlp falló con todos los clientes disponibles")
-
-
-def _to_track_summary(entry: dict) -> dict:
-    duration = entry.get("duration") or 0
-    thumbnails = entry.get("thumbnails") or []
-    cover = thumbnails[-1]["url"] if thumbnails else entry.get("thumbnail")
-    return {
-        "id": entry.get("id"),
-        "title": entry.get("title"),
-        "artist": entry.get("channel") or entry.get("uploader") or "Desconocido",
-        "album": None,
-        "cover": cover,
-        "duration": int(duration),
-    }
-
-
-async def search(query: str, limit: int = 20) -> list[dict]:
-    data, _client = await _run_json(f"ytsearch{limit * 2}:{query}")
-    entries = data.get("entries") or []
-    results = []
-    for e in entries:
-        duration = e.get("duration") or 0
-        if 0 < duration < 15 * 60:
-            results.append(_to_track_summary(e))
-        if len(results) >= limit:
-            break
-    return results
-
-
-async def get_track_info(video_id: str) -> Optional[dict]:
-    try:
-        entry, _client = await _run_json(f"https://www.youtube.com/watch?v={video_id}")
-    except RuntimeError:
-        return None
-    return _to_track_summary(entry)
-
-
-async def get_working_client(video_id: str) -> Optional[str]:
-    """Descubre qué cliente sirve para este video, para reutilizarlo en streaming/descarga."""
-    try:
-        _entry, client = await _run_json(f"https://www.youtube.com/watch?v={video_id}")
-        return client
-    except RuntimeError:
-        return None
-
-
-async def get_available_qualities(video_id: str) -> list[int]:
-    info, _client = await _run_json(f"https://www.youtube.com/watch?v={video_id}")
-    audio_formats = [f for f in info.get("formats", []) if f.get("acodec") and f.get("acodec") != "none"]
-    max_abr = max([f.get("abr") or 0 for f in audio_formats], default=0)
-
-    offered = [128, 192, 256, 320]
-    available = [q for q in offered if max_abr >= q - 16]
-    return available or [128]
-
-
-# ===== Feed / recomendaciones =====
-# Sin canción de referencia (arranque en frío): se rota entre estos géneros
-# para tener variedad, cada "página" del scroll pide uno distinto.
+# Géneros reales soportados por el sistema de tags de Jamendo — se rota
+# entre ellos para el feed inicial (antes de tener una canción de referencia).
 GENRE_SEEDS = [
-    "reggaeton hits", "pop en español", "trap latino", "rock clásico",
-    "lo-fi chill beats", "salsa clásica", "bachata romántica",
-    "electronica mix", "hip hop hits", "balada pop",
+    "pop", "rock", "electronic", "hiphop", "chillout",
+    "jazz", "latin", "reggae", "folk", "classical",
 ]
 
 
+def _client_id() -> str:
+    cid = os.getenv("JAMENDO_CLIENT_ID")
+    if not cid:
+        raise RuntimeError("Falta JAMENDO_CLIENT_ID en las variables de entorno")
+    return cid
+
+
+def _to_track_summary(t: dict) -> dict:
+    return {
+        "id": str(t.get("id")),
+        "title": t.get("name") or "Sin título",
+        "artist": t.get("artist_name") or "Desconocido",
+        "album": t.get("album_name") or None,
+        "cover": t.get("image") or t.get("album_image") or None,
+        "duration": int(t.get("duration") or 0),
+        # internos, no se exponen tal cual al frontend pero se usan en streaming/descarga:
+        "_audio_url": t.get("audio"),
+        "_download_url": t.get("audiodownload"),
+        "_download_allowed": bool(t.get("audiodownload_allowed")),
+        "_genres": ((t.get("musicinfo") or {}).get("tags") or {}).get("genres") or [],
+    }
+
+
+async def _get(path: str, params: dict) -> dict:
+    params = {**params, "client_id": _client_id(), "format": "json"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(f"{JAMENDO_BASE}{path}", params=params)
+        res.raise_for_status()
+        return res.json()
+
+
+async def search(query: str, limit: int = 20) -> list[dict]:
+    data = await _get("/tracks/", {
+        "namesearch": query, "limit": limit, "include": "musicinfo",
+        "audioformat": "mp32", "order": "relevance",
+    })
+    return [_to_track_summary(t) for t in data.get("results", [])]
+
+
+async def get_track_info(track_id: str) -> Optional[dict]:
+    data = await _get("/tracks/", {"id": track_id, "include": "musicinfo", "audioformat": "mp32"})
+    results = data.get("results", [])
+    return _to_track_summary(results[0]) if results else None
+
+
+async def get_available_qualities(track_id: str) -> list[int]:
+    """
+    Jamendo solo ofrece dos códecs de verdad: ~96kbps (mp31) y ~320kbps
+    (mp32). No se muestra nada que la fuente no confirme.
+    """
+    track = await get_track_info(track_id)
+    if not track or not track["_download_allowed"]:
+        return []
+    return [96, 320]
+
+
+def _quality_to_format(quality: int) -> str:
+    return "mp32" if quality >= 200 else "mp31"
+
+
+async def get_stream_url(track_id: str) -> Optional[str]:
+    track = await get_track_info(track_id)
+    return track["_audio_url"] if track else None
+
+
+async def get_download_url(track_id: str, quality: int = 320) -> Optional[dict]:
+    data = await _get("/tracks/", {
+        "id": track_id, "audioformat": _quality_to_format(quality),
+    })
+    results = data.get("results", [])
+    if not results:
+        return None
+    t = results[0]
+    if not t.get("audiodownload_allowed"):
+        return None
+    return {"url": t.get("audiodownload"), "title": t.get("name") or "cancion"}
+
+
+# ===== Feed / recomendaciones =====
+
 async def get_home_feed(offset: int, limit: int = 10) -> list[dict]:
-    """Feed inicial (sin canción de referencia): rota géneros, cada página trae uno distinto."""
     genre = GENRE_SEEDS[(offset // limit) % len(GENRE_SEEDS)]
-    return await search(genre, limit=limit)
+    data = await _get("/tracks/", {
+        "tags": genre, "limit": limit, "order": "popularity_month",
+        "include": "musicinfo", "audioformat": "mp32",
+    })
+    return [_to_track_summary(t) for t in data.get("results", [])]
 
 
-async def get_radio_mix(seed_video_id: str, offset: int, limit: int = 10) -> list[dict]:
-    """
-    Recomendaciones reales de YouTube basadas en una canción: usa la
-    "mix/radio" (playlist RD<id>) que el propio YouTube genera — no es una
-    API inventada, es la función de "Mix" que ya existe en YouTube.
-    """
-    url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}"
-    try:
-        data, _client = await _run_json_flat(url)
-    except RuntimeError:
-        # Si no se puede armar el mix (video restringido, etc.), cae al feed genérico
+async def get_radio_mix(seed_track_id: str, offset: int, limit: int = 10) -> list[dict]:
+    """Recomendaciones basadas en los géneros reales de la canción semilla."""
+    seed = await get_track_info(seed_track_id)
+    if not seed or not seed["_genres"]:
         return await get_home_feed(offset, limit)
 
-    entries = data.get("entries") or []
-    sliced = entries[offset: offset + limit]
-    results = []
-    for e in sliced:
-        duration = e.get("duration") or 0
-        if 0 < duration < 15 * 60:
-            results.append(_to_track_summary(e))
-    return results
-
-
-async def _run_json_flat(url: str) -> tuple[dict, str]:
-    """Como _run_json pero con --flat-playlist (para playlists/mixes, más rápido)."""
-    last_err = ""
-    for client in _CLIENT_FALLBACKS:
-        proc = await asyncio.create_subprocess_exec(
-            "yt-dlp", "-J", "--flat-playlist", *_base_args(client), url,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        out, err = await proc.communicate()
-        if proc.returncode == 0:
-            return json.loads(out), client
-        last_err = err.decode(errors="ignore")
-        print(f"[audio_source] (flat) cliente '{client}' falló: {last_err[:200]}")
-    raise RuntimeError(last_err or "yt-dlp falló con todos los clientes disponibles")
-
-
-def stream_audio_process(video_id: str, fmt: str = "mp3", quality: int = 192, client: str = "android") -> subprocess.Popen:
-    """Devuelve el proceso yt-dlp con stdout en modo pipe (streaming, sin guardar en disco)."""
-    args = [
-        "yt-dlp",
-        "-f", "bestaudio",
-        *_base_args(client),
-        "-x",
-        "--audio-format", fmt,
-        "--audio-quality", f"{quality}K",
-        "-o", "-",
-        f"https://www.youtube.com/watch?v={video_id}",
-    ]
-    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-
-CLIENT_FALLBACKS = _CLIENT_FALLBACKS
+    genre = seed["_genres"][0]
+    data = await _get("/tracks/", {
+        "tags": genre, "limit": limit, "offset": offset,
+        "order": "popularity_month", "include": "musicinfo", "audioformat": "mp32",
+    })
+    results = [_to_track_summary(t) for t in data.get("results", [])]
+    # evita recomendarse a sí misma como primer resultado
+    return [r for r in results if r["id"] != seed_track_id]
