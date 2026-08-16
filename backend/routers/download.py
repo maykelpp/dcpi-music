@@ -42,8 +42,12 @@ async def download(
     if not track:
         raise HTTPException(status_code=404, detail="Canción no encontrada")
 
+    client = await audio_source.get_working_client(track_id)
+    if not client:
+        raise HTTPException(status_code=502, detail="No se pudo acceder al audio de esta canción")
+
     safe_title = re.sub(r"[^\w\s-]", "", track["title"])[:80]
-    proc = audio_source.stream_audio_process(track_id, format, quality)
+    proc = audio_source.stream_audio_process(track_id, format, quality, client=client)
     media_type = "audio/mp4" if format == "m4a" else "audio/mpeg"
 
     return StreamingResponse(
