@@ -1,5 +1,5 @@
 """
-Adapter de fuente de audio — Jamendo (https://api.jamendo.com/v3.0/).
+Adapter de Jamendo (una de tres fuentes — ver sources.py para el dispatcher) (https://api.jamendo.com/v3.0/).
 
 Plataforma real de música con licencias libres/Creative Commons: los
 artistas suben su música específicamente para que se pueda transmitir y

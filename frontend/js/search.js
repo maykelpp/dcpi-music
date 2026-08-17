@@ -39,12 +39,18 @@ const DcpiSearch = (() => {
     return div.innerHTML;
   }
 
+  const SOURCE_BADGE = {
+    jamendo: '',
+    spotify: '<span class="src-badge src-spotify">30s</span>',
+    youtube: '<span class="src-badge src-youtube">YT</span>',
+  };
+
   function rowHtml(t, index) {
     return `
       <li class="track-item" data-index="${index}">
         <img src="${t.cover || ''}" loading="lazy" alt="" onerror="this.style.opacity=0" />
         <div class="meta">
-          <div class="t">${escapeHtml(t.title)}</div>
+          <div class="t">${escapeHtml(t.title)} ${SOURCE_BADGE[t.source] || ''}</div>
           <div class="a">${escapeHtml(t.artist)}</div>
         </div>
         <span class="dur mono">${fmtDuration(t.duration)}</span>
