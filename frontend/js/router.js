@@ -78,6 +78,7 @@ const DcpiRouter = (() => {
       artist: el.dataset.artist,
       cover: el.dataset.cover,
       duration: Number(el.dataset.duration) || 0,
+      source: (el.dataset.id || '').split(':')[0], // el ID siempre viene como "fuente:id"
     };
   }
 

@@ -10,6 +10,7 @@ habilitar "YouTube Data API v3" → Credenciales → API Key).
 Tiene cuota diaria gratuita (10,000 unidades/día; una búsqueda cuesta 100).
 """
 import os
+import re
 
 import httpx
 
@@ -23,9 +24,26 @@ def _api_key() -> str:
     return key
 
 
-def _to_track_summary(item: dict, duration_seconds: int = 0) -> dict:
+def _to_track_summary(item: dict, duration_seconds: int = 0) -> dict | None:
+    """
+    La API de YouTube devuelve 'id' de dos formas distintas según el
+    endpoint: como dict {"kind":..., "videoId":...} en /search, o como
+    string plano en /videos. Si no se maneja cada caso, el dict completo
+    termina convertido a texto y usado como ID (bug real que causaba URLs
+    como ".../youtube:{'kind': 'youtube#video', ...}").
+    """
     snippet = item.get("snippet", {})
-    video_id = item.get("id", {}).get("videoId") or item.get("id")
+    id_field = item.get("id")
+    if isinstance(id_field, dict):
+        video_id = id_field.get("videoId")
+    elif isinstance(id_field, str):
+        video_id = id_field
+    else:
+        video_id = None
+
+    if not video_id:
+        return None  # resultado sin ID de video real (se descarta en vez de propagar el error)
+
     thumbs = snippet.get("thumbnails", {})
     cover = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url")
     return {
@@ -34,7 +52,7 @@ def _to_track_summary(item: dict, duration_seconds: int = 0) -> dict:
         "artist": snippet.get("channelTitle") or "Desconocido",
         "album": None,
         "cover": cover,
-        "duration": duration_seconds,  # se completa con /videos si se necesita exacto
+        "duration": duration_seconds,
     }
 
 
@@ -51,7 +69,8 @@ async def search(query: str, limit: int = 20) -> list[dict]:
         res.raise_for_status()
         data = res.json()
 
-    return [_to_track_summary(item) for item in data.get("items", [])]
+    results = [_to_track_summary(item) for item in data.get("items", [])]
+    return [t for t in results if t]  # descarta los None (sin videoId válido)
 
 
 async def get_track_info(video_id: str) -> dict | None:
@@ -72,7 +91,6 @@ async def get_track_info(video_id: str) -> dict | None:
 
 def _parse_iso8601_duration(s: str) -> int:
     """Convierte 'PT3M45S' a segundos, sin depender de librerías extra."""
-    import re
     m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", s)
     if not m:
         return 0
