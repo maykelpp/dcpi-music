@@ -29,6 +29,19 @@ app.add_middleware(
 )
 
 
+# ===== Evitar caché vieja de JS/CSS en el navegador =====
+# El navegador cachea archivos estáticos agresivamente; sin esto, un
+# redeploy con JS corregido puede seguir "invisible" para el usuario
+# porque su navegador ni siquiera vuelve a pedir el archivo. Forzamos
+# revalidación en cada carga para .js/.css (el HTML y el resto no se tocan).
+@app.middleware("http")
+async def _no_cache_assets(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.endswith((".js", ".css")):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 # ===== Manejo global de errores =====
 # Cualquier excepción no capturada en una ruta cae aquí en vez de tumbar el
 # proceso o devolver un HTML feo — siempre JSON, siempre con código 500,
