@@ -11,6 +11,14 @@ services:
         sync: false
       - key: GENIUS_API_KEY
         sync: false
+      - key: JAMENDO_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: DB_PATH
