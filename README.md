@@ -32,10 +32,17 @@ El `.env` real se configura en Render (paso 3), no se sube al repo.
 
 - `TELEGRAM_BOT_TOKEN` = tu token de BotFather
 - `WEBAPP_URL` = la URL que Render te asigna (algo como `https://dcpi-music.onrender.com`) — **agrégala después del primer deploy**, cuando ya sepas la URL real
-- `GENIUS_API_KEY` = opcional
+- `GENIUS_API_KEY` = opcional, para letras/metadatos cuando aplique
 - `TELEGRAM_WEBHOOK_SECRET` = cualquier cadena random que inventes (protege el webhook)
+- `JAMENDO_CLIENT_ID` = necesario para el feed principal y descargas autorizadas de Jamendo
+- `SPOTIFY_CLIENT_ID` y `SPOTIFY_CLIENT_SECRET` = opcionales, para previews de Spotify (30 s cuando estén disponibles)
+- `YOUTUBE_API_KEY` = opcional, para búsqueda de metadatos y reproducción mediante el reproductor oficial
 
 Tras el primer deploy, copia la URL que te dio Render, pégala en `WEBAPP_URL`, y Render redesplegará solo. Al arrancar, la app registra el webhook de Telegram automáticamente (`register_webhook()` en `main.py`).
+
+## Biblioteca y previews
+
+La app guarda las descargas permitidas de Jamendo en IndexedDB del navegador, dentro de Biblioteca. La reproducción usa primero las URLs de preview/audio que ya llegan con los resultados y precarga el recurso al pasar por una canción; YouTube continúa en su reproductor oficial. La biblioteca es local al navegador/dispositivo y no se sincroniza entre dispositivos.
 
 ## 4. Probar
 
