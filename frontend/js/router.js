@@ -29,7 +29,9 @@ const DcpiRouter = (() => {
   async function loadLibrary() {
     const list = document.getElementById('library-list');
     const status = document.getElementById('library-status');
+    const albumHost = document.getElementById('library-albums');
     list.innerHTML = '<p class="hint">Leyendo descargas guardadas…</p>';
+    albumHost.innerHTML = '';
     try {
       const items = await DcpiLibrary.all();
       if (!items.length) {
@@ -38,25 +40,49 @@ const DcpiRouter = (() => {
         return;
       }
       status.textContent = items.length + ' canción(es) guardadas en este dispositivo.';
-      list.innerHTML = items.map((t, i) =>
-        '<li class="track-item" data-library-index="' + i + '">' +
-        '<img src="' + escapeHtml(t.cover || '') + '" loading="lazy" alt="" onerror="this.style.opacity=0">' +
-        '<div class="meta"><div class="t">' + escapeHtml(t.title) + '</div>' +
-        '<div class="a">' + escapeHtml(t.artist) + ' · DESCARGADA</div></div>' +
-        '<button class="text-btn" data-remove-library="' + i + '">Quitar</button></li>'
-      ).join('');
-      list.querySelectorAll('[data-library-index]').forEach(el => el.addEventListener('click', e => {
-        if (e.target.closest('[data-remove-library]')) return;
-        const item = items[Number(el.dataset.libraryIndex)];
-        const track = DcpiLibrary.playable(item);
-        DcpiPlayer.playTrack(track, [track]);
-        go('player');
-      }));
-      list.querySelectorAll('[data-remove-library]').forEach(btn => btn.addEventListener('click', async e => {
-        e.stopPropagation();
-        await DcpiLibrary.remove(items[Number(btn.dataset.removeLibrary)].id);
-        loadLibrary();
-      }));
+      const groups = new Map();
+      items.forEach(t => {
+        const album = t.album || 'Sencillos / sin álbum';
+        groups.set(album, (groups.get(album) || 0) + 1);
+      });
+      let activeAlbum = '';
+      function renderItems(visible) {
+        list.innerHTML = visible.map((t, i) =>
+          '<li class="track-item" data-library-index="' + i + '">' +
+          '<img src="' + escapeHtml(t.cover || '') + '" loading="lazy" alt="" onerror="this.style.opacity=0">' +
+          '<div class="meta"><div class="t">' + escapeHtml(t.title) + '</div>' +
+          '<div class="a">' + escapeHtml(t.artist) + ' · ' + escapeHtml(t.album || 'Sin álbum') + ' · DESCARGADA</div></div>' +
+          '<button class="text-btn" data-remove-library="' + i + '">Quitar</button></li>'
+        ).join('');
+        list.querySelectorAll('[data-library-index]').forEach(el => el.addEventListener('click', e => {
+          if (e.target.closest('[data-remove-library]')) return;
+          const item = visible[Number(el.dataset.libraryIndex)];
+          const track = DcpiLibrary.playable(item);
+          DcpiPlayer.playTrack(track, [track]);
+          go('player');
+        }));
+        list.querySelectorAll('[data-remove-library]').forEach(btn => btn.addEventListener('click', async e => {
+          e.stopPropagation();
+          await DcpiLibrary.remove(visible[Number(btn.dataset.removeLibrary)].id);
+          loadLibrary();
+        }));
+      }
+      function renderAlbums() {
+        albumHost.innerHTML = '<div class="library-album-heading"><strong>ÁLBUMES</strong><button type="button" data-album-all="1">TODAS</button></div>' +
+          '<div class="library-album-grid">' +
+          Array.from(groups.entries()).map(([name, count]) =>
+            '<button type="button" class="library-album-card ' + (activeAlbum === name ? 'active' : '') + '" data-album="' + escapeHtml(name) + '">' +
+            '<span>♫</span><strong>' + escapeHtml(name) + '</strong><small>' + count + ' pista(s)</small></button>'
+          ).join('') + '</div>';
+        albumHost.querySelector('[data-album-all]').onclick = () => { activeAlbum = ''; renderAlbums(); renderItems(items); };
+        albumHost.querySelectorAll('[data-album]').forEach(btn => btn.onclick = () => {
+          activeAlbum = btn.dataset.album;
+          renderAlbums();
+          renderItems(items.filter(t => (t.album || 'Sencillos / sin álbum') === activeAlbum));
+        });
+      }
+      renderAlbums();
+      renderItems(items);
     } catch (e) {
       list.innerHTML = '<p class="hint">No se pudo abrir la biblioteca: ' + escapeHtml(e.message || 'error') + '</p>';
     }
