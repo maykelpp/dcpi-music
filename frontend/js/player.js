@@ -52,6 +52,8 @@ const DcpiPlayer = (() => {
       },
     });
   };
+  // La API puede haber terminado de cargar antes de que este archivo registre el callback.
+  if (window.YT && window.YT.Player) window.onYouTubeIframeAPIReady();
 
   function loadYouTubeVideo(videoId) {
     if (ytReady && ytPlayer) ytPlayer.loadVideoById(videoId);
@@ -100,7 +102,8 @@ const DcpiPlayer = (() => {
     const isYoutube = track.source === 'youtube';
     els.ytWrap.classList.toggle('hidden', !isYoutube);
     els.cover.style.display = isYoutube ? 'none' : '';
-    els.downloadBtn.style.display = track.source === 'jamendo' ? '' : 'none';
+    els.downloadBtn.style.display = track.source === 'jamendo' && !track.isLocal ? '' : 'none';
+    saveLibraryBtn.hidden = track.source !== 'jamendo' || !!track.isLocal;
 
     if (isYoutube) {
       audio.pause();
