@@ -63,8 +63,15 @@ async def get_track_info(prefixed_id: str) -> dict | None:
 
 
 async def get_home_feed(offset: int, limit: int = 10) -> list[dict]:
-    results = await jamendo_source.get_home_feed(offset, limit)
-    return [_tag(t, "jamendo") for t in results]
+    try:
+        results = await jamendo_source.get_home_feed(offset, limit)
+        return [_tag(t, "jamendo") for t in results]
+    except Exception as e:
+        # Si Jamendo no está configurado o no responde, intenta formar el feed
+        # con las otras fuentes que sí tengan credenciales y previews disponibles.
+        print("[feed] Jamendo no disponible; usando fuentes alternativas:", e)
+        fallback = await search("instrumental music", min(offset + limit, 24))
+        return fallback[offset:offset + limit]
 
 
 async def get_radio_mix(seed_prefixed_id: str, offset: int, limit: int = 10) -> list[dict]:
