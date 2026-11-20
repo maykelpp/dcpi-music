@@ -12,6 +12,9 @@ const DcpiSearch = (() => {
   let feedSeed = null;      // ID de la última canción reproducida
   let loadingMore = false;
   let feedExhausted = false;
+  let requestSeq = 0;
+  const searchCache = new Map();
+  let warmedPreview = null;
 
   function skeletonRow() {
     return `<li class="track-item">
@@ -82,6 +85,8 @@ const DcpiSearch = (() => {
   // ===== Feed (recomendaciones, scroll infinito) =====
   async function loadFeed(reset = false) {
     if (reset) {
+      requestSeq++;
+      loadingMore = false;
       feedOffset = 0;
       allItems = [];
       feedExhausted = false;
@@ -89,28 +94,23 @@ const DcpiSearch = (() => {
       status.textContent = '';
     }
     if (loadingMore || feedExhausted) return;
+    const token = requestSeq;
     loadingMore = true;
     if (!reset) appendLoadingRow();
-
     try {
-      const { results } = await DcpiApi.getFeed(feedSeed, feedOffset, 10);
-      if (!results.length) {
-        feedExhausted = true;
-      } else {
-        allItems = allItems.concat(results);
-        feedOffset += results.length;
-      }
+      const { results = [] } = await DcpiApi.getFeed(feedSeed, feedOffset, 10);
+      if (token !== requestSeq) return;
+      if (!results.length) feedExhausted = true;
+      else { allItems = allItems.concat(results); feedOffset += results.length; }
       removeLoadingRow();
       renderAll();
-      if (!allItems.length) status.textContent = 'No se pudo cargar el feed por ahora.';
+      if (!allItems.length) status.textContent = 'El feed no devolvió canciones. Revisa la conexión del catálogo.';
     } catch (err) {
+      if (token !== requestSeq) return;
       removeLoadingRow();
-      if (!allItems.length) {
-        status.textContent = err.message || 'No se pudo cargar el feed.';
-        list.innerHTML = '';
-      }
+      if (!allItems.length) { status.textContent = err.message || 'No se pudo cargar el feed.'; list.innerHTML = ''; }
     } finally {
-      loadingMore = false;
+      if (token === requestSeq) loadingMore = false;
     }
   }
 
@@ -120,14 +120,20 @@ const DcpiSearch = (() => {
 
   // ===== Búsqueda (por texto) =====
   async function runSearch(q) {
-    renderSkeletons();
+    const token = ++requestSeq;
     status.textContent = '';
+    if (searchCache.has(q)) { allItems = searchCache.get(q); renderAll(); return; }
+    renderSkeletons(4);
     try {
-      const { results } = await DcpiApi.search(q);
+      const { results = [] } = await DcpiApi.search(q);
+      if (token !== requestSeq) return;
       allItems = results;
+      searchCache.set(q, results);
+      if (searchCache.size > 30) searchCache.delete(searchCache.keys().next().value);
       renderAll();
       if (!results.length) status.textContent = 'Sin resultados.';
     } catch (err) {
+      if (token !== requestSeq) return;
       status.textContent = err.message || 'Error al buscar.';
       list.innerHTML = '';
     }
@@ -149,7 +155,7 @@ const DcpiSearch = (() => {
       lastQuery = q;
       mode = 'search';
       runSearch(q);
-    }, 350);
+    }, 180);
   });
 
   // Scroll infinito: solo activo en modo feed
@@ -159,13 +165,27 @@ const DcpiSearch = (() => {
     if (nearBottom) loadFeed(false);
   });
 
+  list.addEventListener('pointerover', e => {
+    const item = e.target.closest('.track-item');
+    if (!item || item.id === 'feed-loading-row') return;
+    const track = allItems[Number(item.dataset.index)];
+    const url = track && (track.preview_url || track._audio_url);
+    if (!url || warmedPreview === url) return;
+    warmedPreview = url;
+    const warm = new Audio();
+    warm.preload = 'auto';
+    warm.src = url;
+    warm.load();
+    window.__dcpiWarmPreview = warm;
+  }, { passive: true });
+
   list.addEventListener('click', (e) => {
     const item = e.target.closest('.track-item');
     if (!item || item.id === 'feed-loading-row') return;
     const track = allItems[Number(item.dataset.index)];
     if (track) {
-      DcpiPlayer.playTrack(track, allItems);
       DcpiRouter.go('player');
+      DcpiPlayer.playTrack(track, allItems);
     }
   });
 
