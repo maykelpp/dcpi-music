@@ -26,7 +26,7 @@ def split_id(prefixed_id: str) -> tuple[str, str]:
 
 async def search(query: str, limit: int = 20) -> list[dict]:
     results = await asyncio.gather(
-        jamendo_source.search(query, limit=8),
+        _safe(jamendo_source.search(query, limit=8)),
         _safe(spotify_source.search(query, limit=8)),
         _safe(youtube_source.search(query, limit=8)),
         return_exceptions=False,
