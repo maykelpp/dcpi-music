@@ -21,3 +21,4 @@ jobs:
       - run: pip install -r requirements.txt pytest
       - run: PYTHONPATH=. pytest -q tests/test_simulated_methods.py
       - run: python -m compileall -q .
+      - run: node --check ../frontend/js/library.js && node --check ../frontend/js/player.js && node --check ../frontend/js/router.js && node --check ../frontend/js/search.js
