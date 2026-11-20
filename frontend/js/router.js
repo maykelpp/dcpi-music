@@ -1,5 +1,5 @@
 const DcpiRouter = (() => {
-  const screens = ['search', 'player', 'history', 'favorites'];
+  const screens = ['search', 'player', 'library', 'history', 'favorites'];
   let current = 'search';
 
   function go(screenName) {
@@ -15,6 +15,7 @@ const DcpiRouter = (() => {
     document.getElementById('mini-player').style.display = screenName === 'player' ? 'none' : '';
     DcpiTelegram.showBackButton(screenName === 'player');
 
+    if (screenName === 'library') loadLibrary();
     if (screenName === 'history') loadHistory();
     if (screenName === 'favorites') loadFavorites();
   }
@@ -23,6 +24,42 @@ const DcpiRouter = (() => {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  async function loadLibrary() {
+    const list = document.getElementById('library-list');
+    const status = document.getElementById('library-status');
+    list.innerHTML = '<p class="hint">Leyendo descargas guardadas…</p>';
+    try {
+      const items = await DcpiLibrary.all();
+      if (!items.length) {
+        list.innerHTML = '<p class="hint">Todavía no hay canciones descargadas. Abre una canción compatible y pulsa Guardar en Biblioteca.</p>';
+        status.textContent = 'Biblioteca local vacía.';
+        return;
+      }
+      status.textContent = items.length + ' canción(es) guardadas en este dispositivo.';
+      list.innerHTML = items.map((t, i) =>
+        '<li class="track-item" data-library-index="' + i + '">' +
+        '<img src="' + escapeHtml(t.cover || '') + '" loading="lazy" alt="" onerror="this.style.opacity=0">' +
+        '<div class="meta"><div class="t">' + escapeHtml(t.title) + '</div>' +
+        '<div class="a">' + escapeHtml(t.artist) + ' · DESCARGADA</div></div>' +
+        '<button class="text-btn" data-remove-library="' + i + '">Quitar</button></li>'
+      ).join('');
+      list.querySelectorAll('[data-library-index]').forEach(el => el.addEventListener('click', e => {
+        if (e.target.closest('[data-remove-library]')) return;
+        const item = items[Number(el.dataset.libraryIndex)];
+        const track = DcpiLibrary.playable(item);
+        DcpiPlayer.playTrack(track, [track]);
+        go('player');
+      }));
+      list.querySelectorAll('[data-remove-library]').forEach(btn => btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        await DcpiLibrary.remove(items[Number(btn.dataset.removeLibrary)].id);
+        loadLibrary();
+      }));
+    } catch (e) {
+      list.innerHTML = '<p class="hint">No se pudo abrir la biblioteca: ' + escapeHtml(e.message || 'error') + '</p>';
+    }
   }
 
   async function loadHistory() {
@@ -94,6 +131,7 @@ const DcpiRouter = (() => {
   document.querySelectorAll('.nav-item').forEach((btn) => {
     btn.addEventListener('click', () => go(btn.dataset.screen));
   });
+  document.getElementById('btn-refresh-library').addEventListener('click', loadLibrary);
   document.getElementById('btn-clear-history').addEventListener('click', async () => {
     if (!confirm('¿Borrar todo el historial?')) return;
     await DcpiApi.clearHistory().catch(() => {});
