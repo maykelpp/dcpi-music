@@ -277,3 +277,14 @@ input[type="range"]::-webkit-slider-thumb {
 @media (min-width: 640px) {
   #app { max-width: 480px; margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.4); }
 }
+
+/* Biblioteca descargada: álbumes y filtros */
+.library-albums{margin:4px 0 16px}
+.library-album-heading{display:flex;align-items:center;justify-content:space-between;margin:8px 0 10px;color:var(--muted);font-size:11px;letter-spacing:1px}
+.library-album-heading button{background:var(--surface-2);border:1px solid rgba(255,255,255,.08);color:var(--text);border-radius:9px;padding:7px 10px;font-size:10px}
+.library-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:9px}
+.library-album-card{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:var(--surface);color:var(--text);text-align:left}
+.library-album-card>span{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,.16);color:var(--accent);font-size:19px}
+.library-album-card strong{font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.library-album-card small{font-size:10px;color:var(--muted)}
+.library-album-card.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
