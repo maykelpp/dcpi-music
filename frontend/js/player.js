@@ -1,6 +1,6 @@
 const DcpiPlayer = (() => {
   const audio = new Audio();
-  audio.preload = 'metadata';
+  audio.preload = 'auto';
 
   const els = {
     cover: document.getElementById('cover-img'),
@@ -108,9 +108,9 @@ const DcpiPlayer = (() => {
       loadYouTubeVideo(videoId);
     } else {
       if (ytPlayer && ytReady) ytPlayer.stopVideo();
-      audio.src = DcpiApi.streamUrl(track.id);
-      audio.play().catch(() => {});
-      setPlayingUI(true);
+      audio.src = track.localUrl || track.preview_url || track._audio_url || DcpiApi.streamUrl(track.id);
+      audio.load();
+      audio.play().then(() => setPlayingUI(true)).catch(() => setPlayingUI(false));
     }
 
     DcpiLyrics.reset();
@@ -177,6 +177,10 @@ const DcpiPlayer = (() => {
   audio.addEventListener('loadedmetadata', () => {
     els.timeTotal.textContent = fmtTime(audio.duration);
   });
+
+  audio.addEventListener('play', () => setPlayingUI(true));
+  audio.addEventListener('pause', () => setPlayingUI(false));
+  audio.addEventListener('error', () => setPlayingUI(false));
 
   audio.addEventListener('ended', () => {
     if (currentTrack?.source === 'youtube') return; // lo maneja onStateChange del embed
@@ -277,6 +281,30 @@ const DcpiPlayer = (() => {
     } catch (_) {}
   });
 
+  // ===== Guardar descarga en Biblioteca local =====
+  const saveLibraryBtn = document.getElementById('btn-save-library');
+  saveLibraryBtn.addEventListener('click', async () => {
+    if (!currentTrack) return;
+    if (currentTrack.isLocal) { alert('Esta canción ya está guardada en Biblioteca.'); return; }
+    if (currentTrack.source !== 'jamendo') { alert('Esta fuente no ofrece descarga desde DCPI Music.'); return; }
+    saveLibraryBtn.disabled = true;
+    saveLibraryBtn.textContent = 'Guardando…';
+    try {
+      const response = await fetch(DcpiApi.downloadUrl(currentTrack.id, 320));
+      if (!response.ok) throw new Error('No se pudo descargar el audio (' + response.status + ').');
+      const blob = await response.blob();
+      if (!blob.size || !blob.type.startsWith('audio/')) throw new Error('El servidor no devolvió un archivo de audio válido.');
+      await DcpiLibrary.put(currentTrack, blob);
+      saveLibraryBtn.textContent = 'Guardado ✓';
+      document.getElementById('library-status').textContent = 'Canción guardada en este dispositivo.';
+    } catch (err) {
+      alert(err.message || 'No se pudo guardar en Biblioteca.');
+    } finally {
+      saveLibraryBtn.disabled = false;
+      if (saveLibraryBtn.textContent === 'Guardando…') saveLibraryBtn.textContent = 'Guardar en Biblioteca';
+    }
+  });
+
   // ===== Descargas =====
   const modal = document.getElementById('download-modal');
   const qualityOptions = document.getElementById('quality-options');
@@ -327,8 +355,25 @@ const DcpiPlayer = (() => {
   document.getElementById('cancel-download').addEventListener('click', () => modal.classList.add('hidden'));
   document.getElementById('confirm-download').addEventListener('click', () => {
     if (!currentTrack) return;
-    window.location.href = DcpiApi.downloadUrl(currentTrack.id, selectedQuality);
-    modal.classList.add('hidden');
+    const btn = document.getElementById('confirm-download');
+    btn.disabled = true;
+    btn.textContent = 'Descargando…';
+    fetch(DcpiApi.downloadUrl(currentTrack.id, selectedQuality)).then(async response => {
+      if (!response.ok) throw new Error('Error de descarga: ' + response.status);
+      const blob = await response.blob();
+      if (!blob.size || !blob.type.startsWith('audio/')) throw new Error('El servidor no devolvió un audio válido.');
+      await DcpiLibrary.put(currentTrack, blob);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = (currentTrack.title || 'dcpi-audio').replace(/[\\/:*?"<>|]/g, '_') + '.mp3';
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      modal.classList.add('hidden');
+      alert('Descarga completada y añadida a Biblioteca.');
+    }).catch(err => alert(err.message || 'No se pudo completar la descarga.')).finally(() => {
+      btn.disabled = false; btn.textContent = 'Descargar';
+    });
   });
 
   loadFavoriteIds();
