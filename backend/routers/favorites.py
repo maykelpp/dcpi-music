@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, HTTPException
 
 from db.init import db
 from middleware.identity import get_user_id
@@ -25,7 +25,7 @@ async def add_favorite(payload: dict, user_id: str = Depends(get_user_id)):
     artist = payload.get("artist")
 
     if not track_id or not title or not artist:
-        return {"error": "Faltan datos de la canción"}, 400
+        raise HTTPException(status_code=400, detail="Faltan datos de la canción")
 
     db().execute(
         """INSERT INTO favorites (telegram_id, track_id, title, artist, album, cover_url, duration)
